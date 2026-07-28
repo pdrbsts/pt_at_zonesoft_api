@@ -499,6 +499,26 @@ class StockPicking(models.Model):
 
         return prod_map
 
+    def _fetch_zonesoft_pdf_url(self, base_host, store_id, doc_code, serie, numero, app_key, app_secret, client_id, timeout_val):
+        AccountMove = self.env['account.move']
+        print_payload = {
+            "document": {
+                "loja": int(store_id),
+                "doc": str(doc_code),
+                "serie": str(serie),
+                "numero": int(numero)
+            }
+        }
+        try:
+            res = AccountMove._send_zonesoft_request(f"{base_host}documents/print", print_payload, app_key, app_secret, client_id, timeout_val)
+            if res.status_code == 200:
+                url_found = res.json().get('Response', {}).get('Content', {}).get('document', {}).get('url')
+                if url_found and isinstance(url_found, str):
+                    return url_found
+        except Exception as e:
+            _logger.warning("Falha ao obter URL do PDF via documents/print na ZoneSoft: %s", str(e))
+        return None
+
     def action_send_certified_picking(self, raise_exception=True):
         ICP = self.env['ir.config_parameter'].sudo()
         provider = ICP.get_param('pt_at_invoice_api.provider', 'zonesoft')
@@ -671,7 +691,7 @@ class StockPicking(models.Model):
 
                     doc_number_found = None
                     atcud_found = None
-                    qr_code_found = None
+                    doc_code = 'GT'
 
                     if isinstance(inv_resp, dict):
                         doc_code = inv_resp.get('doc', 'GT')
@@ -707,8 +727,17 @@ class StockPicking(models.Model):
 
                     certified_number = doc_number_found or f"GT {picking.name}"
                     atcud = atcud_found or (inv_resp.get('atcud') if isinstance(inv_resp, dict) else False) or (inv_resp.get('hash') if isinstance(inv_resp, dict) else False) or 'N/A'
-                    qr_code = (inv_resp.get('qr_code') if isinstance(inv_resp, dict) else False) or (inv_resp.get('qrcode') if isinstance(inv_resp, dict) else False) or (inv_resp.get('pdf') if isinstance(inv_resp, dict) else False) or ''
+                    qr_code = (inv_resp.get('qr_code') if isinstance(inv_resp, dict) else False) or (inv_resp.get('qrcode') if isinstance(inv_resp, dict) else False) or ''
                     pdf_url = inv_resp.get('pdf') if isinstance(inv_resp, dict) else None
+
+                    # If PDF URL is missing, query documents/print endpoint
+                    if not pdf_url and doc_number_found:
+                        parts = certified_number.split()
+                        doc_type_part = parts[0] if len(parts) > 0 else 'GT'
+                        serie_num_part = parts[1] if len(parts) > 1 else ''
+                        if '/' in serie_num_part:
+                            s_name, n_num = serie_num_part.split('/')[:2]
+                            pdf_url = picking._fetch_zonesoft_pdf_url(base_host, store_id, doc_type_part, s_name, n_num, app_key, app_secret, client_id, timeout_val)
 
                     pdf_b64 = None
                     if pdf_url and isinstance(pdf_url, str):

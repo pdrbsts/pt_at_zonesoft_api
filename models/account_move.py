@@ -453,14 +453,36 @@ class AccountMove(models.Model):
                     numero = inv_resp.get('numero', '')
                     certified_number = f"{doc_code} {serie}/{numero}".strip()
                     atcud = inv_resp.get('atcud') or inv_resp.get('hash') or 'N/A'
-                    qr_code = inv_resp.get('qr_code') or inv_resp.get('pdf') or ''
+                    qr_code = inv_resp.get('qr_code') or ''
                     pdf_url = inv_resp.get('pdf')
 
+                    if not pdf_url and serie and numero and str(numero) != '0':
+                        try:
+                            print_payload = {
+                                "document": {
+                                    "loja": int(store_id),
+                                    "doc": str(doc_code),
+                                    "serie": str(serie),
+                                    "numero": int(numero)
+                                }
+                            }
+                            res_print = move._send_zonesoft_request(f"{base_host}documents/print", print_payload, app_key, app_secret, client_id, timeout_val)
+                            if res_print.status_code == 200:
+                                pdf_url = res_print.json().get('Response', {}).get('Content', {}).get('document', {}).get('url')
+                        except Exception as e:
+                            _logger.warning("Falha ao obter URL do PDF via documents/print na ZoneSoft: %s", str(e))
+
                     pdf_b64 = None
-                    if pdf_url:
-                        pdf_resp = requests.get(pdf_url, timeout=timeout_val)
-                        if pdf_resp.status_code == 200:
-                            pdf_b64 = base64.b64encode(pdf_resp.content).decode('utf-8')
+                    if pdf_url and isinstance(pdf_url, str):
+                        if pdf_url.startswith('http://') or pdf_url.startswith('https://'):
+                            try:
+                                pdf_resp = requests.get(pdf_url, timeout=timeout_val)
+                                if pdf_resp.status_code == 200 and pdf_resp.content:
+                                    pdf_b64 = base64.b64encode(pdf_resp.content).decode('utf-8')
+                            except Exception:
+                                pass
+                        elif pdf_url.startswith('JVBER') or len(pdf_url) > 100:
+                            pdf_b64 = pdf_url
 
                     if not pdf_b64:
                         err_msg = _("A Zonesoft não retornou nenhum documento!")
