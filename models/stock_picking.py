@@ -477,24 +477,31 @@ class StockPicking(models.Model):
                 prod_map = picking._sync_zonesoft_products_for_picking(base_host, app_key, app_secret, client_id, timeout_val, store_id)
 
                 now_utc = datetime.utcnow()
-                target_dt = now_utc + timedelta(hours=2)
+                # Portugal local time is UTC+1 (WEST in summer)
+                now_local = now_utc + timedelta(hours=1)
+                min_future_dt = now_local + timedelta(minutes=15)
+                default_target_dt = now_local + timedelta(minutes=30)
 
+                target_dt = default_target_dt
+
+                # Evaluate user entered load date and time:
+                # If date/time is in the past (<= min_future_dt), ignore it and use default_target_dt (now + 30 min)
                 if picking.certified_picking_datacarga:
                     try:
                         date_part = picking.certified_picking_datacarga
-                        time_part_str = picking.certified_picking_horacarga or target_dt.strftime("%H:%M:%S")
+                        time_part_str = picking.certified_picking_horacarga or default_target_dt.strftime("%H:%M:%S")
                         time_parts = [int(p) for p in time_part_str.split(':')[:3]]
                         while len(time_parts) < 3:
                             time_parts.append(0)
 
                         user_dt = datetime(date_part.year, date_part.month, date_part.day, time_parts[0], time_parts[1], time_parts[2])
-                        if user_dt > now_utc:
+                        if user_dt > min_future_dt:
                             target_dt = user_dt
                     except Exception:
-                        pass
+                        target_dt = default_target_dt
 
                 today_str = str(fields.Date.today())
-                now_str = (now_utc + timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")
+                now_str = now_local.strftime("%Y-%m-%d %H:%M:%S")
 
                 datacarga_str = target_dt.strftime("%Y-%m-%d")
                 horacarga_str = target_dt.strftime("%H:%M:%S")
