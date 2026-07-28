@@ -14,4 +14,17 @@ class IrActionsReport(models.Model):
                 if att:
                     pdf_content = att.raw or base64.b64decode(att.datas)
                     return pdf_content, 'pdf'
+
+        if res_ids:
+            report_sudo = self._get_report(report_ref)
+            if report_sudo and report_sudo.model == 'stock.picking':
+                pickings = self.env['stock.picking'].browse(res_ids)
+                certified_pickings = pickings.filtered(lambda p: p.certified_picking_status == 'sent' and (p.certified_picking_pdf_id or p.message_main_attachment_id))
+                if len(certified_pickings) == len(pickings) and len(pickings) == 1:
+                    att = certified_pickings.certified_picking_pdf_id or certified_pickings.message_main_attachment_id
+                    if att:
+                        pdf_content = att.raw or base64.b64decode(att.datas)
+                        return pdf_content, 'pdf'
+
         return super()._render_qweb_pdf(report_ref, res_ids=res_ids, data=data)
+

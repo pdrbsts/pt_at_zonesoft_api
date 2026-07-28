@@ -36,3 +36,17 @@ class TestCertifiedInvoiceVat(common.TransactionCase):
         self.assertEqual(move.certified_invoice_number, 'FT AP2026L1II1/6')
         self.assertEqual(move.certified_invoice_status, 'sent')
 
+    def test_process_certified_picking_updates_name(self):
+        partner = self.env['res.partner'].create({'name': 'Test Partner Picking'})
+        picking_type = self.env['stock.picking.type'].search([('code', '=', 'outgoing')], limit=1)
+        picking = self.env['stock.picking'].create({
+            'picking_type_id': picking_type.id if picking_type else False,
+            'partner_id': partner.id,
+            'name': 'WH/OUT/00002',
+        })
+        picking._process_certified_picking_success('GT AP2026L1II1/1', 'ATCUD999', 'QR999', 'dGVzdA==')
+        self.assertEqual(picking.name, 'GT AP2026L1II1/1')
+        self.assertEqual(picking.certified_picking_number, 'GT AP2026L1II1/1')
+        self.assertEqual(picking.certified_picking_status, 'sent')
+
+

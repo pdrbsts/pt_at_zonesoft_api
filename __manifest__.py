@@ -13,11 +13,12 @@ Módulo de Integração com API de Faturação Certificada (Portugal - Autoridad
 - Inclui um endpoint de simulação (Mock API) para testes imediatos.
     """,
     'author': 'Antigravity AI',
-    'depends': ['account', 'mail'],
+    'depends': ['account', 'stock', 'mail'],
     'data': [
         'security/ir.model.access.csv',
         'views/res_config_settings_views.xml',
         'views/account_move_views.xml',
+        'views/stock_picking_views.xml',
     ],
     'installable': True,
     'application': True,

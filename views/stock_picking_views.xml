@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_picking_form_inherit_pt_at" model="ir.ui.view">
+        <field name="name">stock.picking.form.inherit.pt.at</field>
+        <field name="model">stock.picking</field>
+        <field name="inherit_id" ref="stock.view_picking_form"/>
+        <field name="arch" type="xml">
+            <!-- Header button for manual GT API emission -->
+            <xpath expr="//header" position="inside">
+                <button name="action_send_certified_picking" 
+                        type="object" 
+                        string="Emitir Guia de Transporte (API)" 
+                        class="oe_highlight"
+                        invisible="state != 'done' or picking_type_code != 'outgoing' or certified_picking_status == 'sent'"/>
+            </xpath>
+
+            <!-- Status alert near top header -->
+            <xpath expr="//header" position="after">
+                <div class="alert alert-danger mb-0" role="alert" invisible="certified_picking_status != 'error'">
+                    <strong>Erro na Emissão Certificada AT da Guia de Transporte:</strong> 
+                    <field name="certified_picking_error_log" readonly="1"/>
+                </div>
+            </xpath>
+
+            <!-- Notebook Tab for Certified Guia de Transporte details -->
+            <xpath expr="//notebook" position="inside">
+                <page string="Guia de Transporte AT" invisible="picking_type_code != 'outgoing'">
+                    <group>
+                        <group string="Estado &amp; Certificação GT">
+                            <field name="certified_picking_status" widget="badge" 
+                                   decoration-success="certified_picking_status == 'sent'" 
+                                   decoration-danger="certified_picking_status == 'error'" 
+                                   decoration-muted="certified_picking_status == 'not_sent'"/>
+                            <field name="certified_picking_number"/>
+                            <field name="certified_picking_atcud"/>
+                            <field name="certified_picking_sent_date"/>
+                        </group>
+                        <group string="Dados de Validação AT">
+                            <field name="certified_picking_qr_code"/>
+                        </group>
+                    </group>
+                </page>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Tree view extension for delivery orders -->
+    <record id="vpicktree_inherit_pt_at" model="ir.ui.view">
+        <field name="name">stock.picking.tree.inherit.pt.at</field>
+        <field name="model">stock.picking</field>
+        <field name="inherit_id" ref="stock.vpicktree"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='name']" position="after">
+                <field name="certified_picking_status" widget="badge" string="Estado Guia AT"
+                       decoration-success="certified_picking_status == 'sent'" 
+                       decoration-danger="certified_picking_status == 'error'" 
+                       decoration-muted="certified_picking_status == 'not_sent'"
+                       optional="show"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>
