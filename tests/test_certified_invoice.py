@@ -23,3 +23,16 @@ class TestCertifiedInvoiceVat(common.TransactionCase):
 
         vat2 = self.AccountMove._clean_vat("501 234 567", "Empresa Exemplo 2")
         self.assertEqual(vat2, "501234567")
+
+    def test_process_certified_success_updates_name(self):
+        partner = self.env['res.partner'].create({'name': 'Test Partner'})
+        move = self.AccountMove.create({
+            'move_type': 'out_invoice',
+            'partner_id': partner.id,
+        })
+        move.name = 'INV/2026/00011'
+        move._process_certified_success('FT AP2026L1II1/6', 'ATCUD123', 'QR123', 'dGVzdA==')
+        self.assertEqual(move.name, 'FT AP2026L1II1/6')
+        self.assertEqual(move.certified_invoice_number, 'FT AP2026L1II1/6')
+        self.assertEqual(move.certified_invoice_status, 'sent')
+

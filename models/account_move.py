@@ -534,6 +534,7 @@ class AccountMove(models.Model):
         })
 
         self.write({
+            'name': certified_number,
             'certified_invoice_status': 'sent',
             'certified_invoice_number': certified_number,
             'certified_invoice_atcud': atcud,
