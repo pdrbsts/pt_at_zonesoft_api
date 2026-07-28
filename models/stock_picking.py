@@ -711,14 +711,16 @@ class StockPicking(models.Model):
                     pdf_url = inv_resp.get('pdf') if isinstance(inv_resp, dict) else None
 
                     pdf_b64 = None
-                    if pdf_url:
-                        pdf_resp = requests.get(pdf_url, timeout=timeout_val)
-                        if pdf_resp.status_code == 200:
-                            pdf_b64 = base64.b64encode(pdf_resp.content).decode('utf-8')
-
-                    # Generate certified PDF reportlab with real QR Code matrix and official AT details
-                    if doc_number_found:
-                        pdf_b64 = picking._generate_certified_picking_pdf(certified_number, atcud, qr_code)
+                    if pdf_url and isinstance(pdf_url, str):
+                        if pdf_url.startswith('http://') or pdf_url.startswith('https://'):
+                            try:
+                                pdf_resp = requests.get(pdf_url, timeout=timeout_val)
+                                if pdf_resp.status_code == 200 and pdf_resp.content:
+                                    pdf_b64 = base64.b64encode(pdf_resp.content).decode('utf-8')
+                            except Exception:
+                                pass
+                        elif pdf_url.startswith('JVBER') or len(pdf_url) > 100:
+                            pdf_b64 = pdf_url
 
                     if not pdf_b64:
                         err_msg = _("A Zonesoft não retornou nenhum documento!")
