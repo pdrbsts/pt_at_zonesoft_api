@@ -51,10 +51,10 @@ Na sua máquina ou servidor Odoo:
 
 ```bash
 cd /opt/odoo/custom_addons
-git clone https://github.com/pdrbsts/pt_at_zonesoft_api.git pt_at_invoice_api
+git clone https://github.com/pdrbsts/pt_at_zonesoft_api.git pt_at_zonesoft_api
 ```
 
-> **Nota**: Garanta que a pasta do módulo se chama `pt_at_invoice_api` dentro da sua diretoria de `custom_addons`.
+> **Nota**: Garanta que a pasta do módulo se chama `pt_at_zonesoft_api` dentro da sua diretoria de `custom_addons`.
 
 ### 2. Configurar o ficheiro `odoo.conf`
 
@@ -69,7 +69,7 @@ addons_path = /opt/odoo/odoo/addons,/opt/odoo/custom_addons
 
 #### Opção A (Via Linha de Comandos - Recomendado):
 ```bash
-/opt/odoo/venv/bin/python3 /opt/odoo/odoo/odoo-bin -c /etc/odoo.conf -d NOME_DA_SUA_BD -u pt_at_invoice_api --stop-after-init
+/opt/odoo/venv/bin/python3 /opt/odoo/odoo/odoo-bin -c /etc/odoo.conf -d NOME_DA_SUA_BD -u pt_at_zonesoft_api --stop-after-init
 systemctl restart odoo
 ```
 
@@ -77,7 +77,7 @@ systemctl restart odoo
 1. Aceda ao Odoo com um utilizador Administrador.
 2. Ative o **Modo de Criador / Developer Mode** nas Definições.
 3. Aceda ao menu **Aplicações** ➔ Clique em **Atualizar Lista de Aplicações**.
-4. Pesquise por `Portugal AT Certified Invoicing API Bridge` (ou `pt_at_invoice_api`).
+4. Pesquise por `Portugal AT Certified Invoicing API Bridge` (ou `pt_at_zonesoft_api`).
 5. Clique em **Instalar**.
 
 ---
