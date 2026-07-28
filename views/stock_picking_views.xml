@@ -35,7 +35,9 @@
                             <field name="certified_picking_atcud"/>
                             <field name="certified_picking_sent_date"/>
                         </group>
-                        <group string="Dados de Validação AT">
+                        <group string="Dados de Validação &amp; Transporte AT">
+                            <field name="certified_picking_datacarga"/>
+                            <field name="certified_picking_horacarga" placeholder="ex: 15:30:00"/>
                             <field name="certified_picking_qr_code"/>
                         </group>
                     </group>

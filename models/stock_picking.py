@@ -32,6 +32,15 @@ class StockPicking(models.Model):
     certified_picking_error_log = fields.Text(string="Último Erro API", copy=False, readonly=True)
     certified_picking_sent_date = fields.Datetime(string="Data de Emissão na API", copy=False, readonly=True)
     certified_picking_pdf_id = fields.Many2one('ir.attachment', string="PDF Guia Certificada", copy=False, readonly=True)
+    certified_picking_datacarga = fields.Date(
+        string="Data de Carga / Início Transporte",
+        default=fields.Date.today,
+        help="Data agendada para o início do transporte. Obrigatoriamente enviada para a AT."
+    )
+    certified_picking_horacarga = fields.Char(
+        string="Hora de Carga (HH:MM:SS)",
+        help="Hora agendada para o início do transporte. Obrigatoriamente enviada no futuro para a AT."
+    )
 
     def _action_done(self):
         res = super()._action_done()
@@ -403,9 +412,37 @@ class StockPicking(models.Model):
                         'armazem': 1,
                     })
 
+                from datetime import datetime, timedelta
+
+                now_datetime = datetime.now()
+
+                # Default transport load datetime: now + 15 minutes to guarantee future timestamp for AT webservice
+                target_dt = now_datetime + timedelta(minutes=15)
+
+                if picking.certified_picking_datacarga:
+                    try:
+                        date_part = picking.certified_picking_datacarga
+                        time_part_str = picking.certified_picking_horacarga or target_dt.strftime("%H:%M:%S")
+                        time_parts = [int(p) for p in time_part_str.split(':')[:3]]
+                        while len(time_parts) < 3:
+                            time_parts.append(0)
+
+                        user_dt = datetime(date_part.year, date_part.month, date_part.day, time_parts[0], time_parts[1], time_parts[2])
+                        if user_dt > now_datetime:
+                            target_dt = user_dt
+                    except Exception:
+                        pass
+
                 today_str = str(fields.Date.today())
-                now_str = fields.Datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                time_str = fields.Datetime.now().strftime("%H:%M:%S")
+                now_str = now_datetime.strftime("%Y-%m-%d %H:%M:%S")
+
+                datacarga_str = target_dt.strftime("%Y-%m-%d")
+                horacarga_str = target_dt.strftime("%H:%M:%S")
+
+                picking.write({
+                    'certified_picking_datacarga': target_dt.date(),
+                    'certified_picking_horacarga': horacarga_str,
+                })
 
                 gt_payload = {
                     'transportdocument': {
@@ -423,10 +460,10 @@ class StockPicking(models.Model):
                         'morada': f"{partner.street or ''} {partner.zip or ''} {partner.city or ''}".strip() or "------",
                         'data': today_str,
                         'datahora': now_str,
-                        'datacarga': today_str,
-                        'horacarga': time_str,
-                        'datadescarga': today_str,
-                        'horadescarga': time_str,
+                        'datacarga': datacarga_str,
+                        'horacarga': horacarga_str,
+                        'datadescarga': datacarga_str,
+                        'horadescarga': horacarga_str,
                         'carga': f"{company.street or ''}".strip() or "Morada Origem",
                         'carga_localidade': company.city or "Localidade",
                         'carga_codigo_postal': company.zip or "0000-000",
