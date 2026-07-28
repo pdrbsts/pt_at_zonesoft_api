@@ -4,7 +4,7 @@ import io
 import json
 import logging
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
@@ -168,20 +168,19 @@ class StockPicking(models.Model):
                 {"numdocserie": {"order": "lastupdate;desc", "limit": 20}},
                 app_key, app_secret, client_id, timeout_val
             )
-            serie_name = "AP2026L1II1"
+            serie_name = "AP2026L1I1"
             has_gt = False
             gt_next_num = 0
 
             if res.status_code == 200:
                 series_list = res.json().get('Response', {}).get('Content', {}).get('numdocserie') or []
                 for s in series_list:
-                    if s.get('doc') == 'FT' and s.get('serie'):
-                        serie_name = s.get('serie')
                     if s.get('doc') == 'GT':
                         has_gt = True
-                        gt_next_num = s.get('numero', 0)
-                        if s.get('serie'):
-                            serie_name = s.get('serie')
+                        if s.get('numero', 0) >= gt_next_num:
+                            gt_next_num = s.get('numero', 0)
+                            if s.get('serie'):
+                                serie_name = s.get('serie')
 
             if not has_gt:
                 _logger.info("Criando série para documento GT na loja %s com série %s...", store_id, serie_name)
@@ -201,7 +200,97 @@ class StockPicking(models.Model):
             return serie_name, gt_next_num
         except Exception as e:
             _logger.warning("Falha ao verificar/registar série GT na ZoneSoft: %s", str(e))
-            return "AP2026L1II1", 0
+            return "AP2026L1I1", 0
+
+    def _get_zonesoft_gt_template(self, store_id):
+        today_str = str(fields.Date.today())
+        now_str = fields.Datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        return {
+            "loja": int(store_id),
+            "numero": 0,
+            "doc": "GT",
+            "data": today_str,
+            "cliente": 0,
+            "nome": "",
+            "liquido": 0.0,
+            "total": 0.0,
+            "anulado": 0,
+            "emp": 0,
+            "pago": 1,
+            "datapag": today_str,
+            "tipo": 0,
+            "pagamento": 0,
+            "datahora": now_str,
+            "deve": 0,
+            "idcx": 0,
+            "mesa": 0,
+            "mesaidx": 0,
+            "lugar": 0,
+            "contribuinte": "999999990",
+            "morada": "",
+            "cartao": 0,
+            "docext": 0,
+            "compdoc": 0,
+            "descricao": "",
+            "doccomp": "",
+            "sync": 1,
+            "levantamento": "",
+            "dataentrega": "",
+            "telefone": "",
+            "impressao": 0,
+            "serie": "AP2026L1I1",
+            "hash": "",
+            "hashcontrol": "1",
+            "carga": "",
+            "datacarga": "",
+            "horacarga": "",
+            "descarga": "",
+            "datadescarga": "",
+            "horadescarga": "",
+            "viatura": "",
+            "peso": "0",
+            "ljorigem": 0,
+            "armorigem": 0,
+            "ljdestino": 0,
+            "armdestino": 0,
+            "empanulado": 0,
+            "descanulado": "",
+            "data_alteracao": "1899-12-30 00:00:00",
+            "descarga_localidade": "",
+            "descarga_codigo_postal": "",
+            "descarga_distrito": "",
+            "carga_localidade": "",
+            "carga_codigo_postal": "",
+            "carga_distrito": "",
+            "ATDocCodeID": "",
+            "ATDocCodeSource": "",
+            "motivo_isencao": "",
+            "isencao": "",
+            "lastupdate": fields.Datetime.now().strftime("%Y-%m-%d %H:%M:%S.000"),
+            "dpercent": 0,
+            "descontos": 0,
+            "ivaincluido": 1,
+            "docforn": "",
+            "numpag": "",
+            "tipodoc": 0,
+            "dataDoc": today_str,
+            "dataPagamento": today_str,
+            "diasPagamento": 0,
+            "arredondamento": 0,
+            "observacoes": "",
+            "CashVATScheme": 0,
+            "latitude": "",
+            "longitude": "",
+            "app_origem": 1,
+            "hashcontrol2": "",
+            "sync_at": 0,
+            "countrycode": "",
+            "referencia_pagamento": "",
+            "vendas": [],
+            "documentos_pagamento": [],
+            "movimentospropriedades": [],
+            "compensacoes": []
+        }
 
     def _sync_zonesoft_products_for_picking(self, base_host, app_key, app_secret, client_id, timeout_val, store_id):
         self.ensure_one()
@@ -387,6 +476,38 @@ class StockPicking(models.Model):
 
                 prod_map = picking._sync_zonesoft_products_for_picking(base_host, app_key, app_secret, client_id, timeout_val, store_id)
 
+                now_utc = datetime.utcnow()
+                target_dt = now_utc + timedelta(hours=2)
+
+                if picking.certified_picking_datacarga:
+                    try:
+                        date_part = picking.certified_picking_datacarga
+                        time_part_str = picking.certified_picking_horacarga or target_dt.strftime("%H:%M:%S")
+                        time_parts = [int(p) for p in time_part_str.split(':')[:3]]
+                        while len(time_parts) < 3:
+                            time_parts.append(0)
+
+                        user_dt = datetime(date_part.year, date_part.month, date_part.day, time_parts[0], time_parts[1], time_parts[2])
+                        if user_dt > now_utc:
+                            target_dt = user_dt
+                    except Exception:
+                        pass
+
+                today_str = str(fields.Date.today())
+                now_str = (now_utc + timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")
+
+                datacarga_str = target_dt.strftime("%Y-%m-%d")
+                horacarga_str = target_dt.strftime("%H:%M:%S")
+
+                descarga_dt = target_dt + timedelta(hours=1)
+                datadescarga_str = descarga_dt.strftime("%Y-%m-%d")
+                horadescarga_str = descarga_dt.strftime("%H:%M:%S")
+
+                picking.write({
+                    'certified_picking_datacarga': target_dt.date(),
+                    'certified_picking_horacarga': horacarga_str,
+                })
+
                 vendas = []
                 for move in picking.move_ids:
                     if not move.product_id:
@@ -403,6 +524,9 @@ class StockPicking(models.Model):
                     prod_name = (move.product_id.name or move.name or 'Artigo')[:200]
 
                     vendas.append({
+                        'doc': 'GT',
+                        'serie': serie_str,
+                        'numero': gt_numero,
                         'codigo': prod_code,
                         'descricao': prod_name,
                         'obs': (move.description_picking or prod_name)[:200],
@@ -410,73 +534,42 @@ class StockPicking(models.Model):
                         'punit': price_unit,
                         'desconto': discount,
                         'armazem': 1,
-                    })
-
-                from datetime import datetime, timedelta
-
-                now_datetime = datetime.now()
-
-                # Default transport load datetime: now + 15 minutes to guarantee future timestamp for AT webservice
-                target_dt = now_datetime + timedelta(minutes=15)
-
-                if picking.certified_picking_datacarga:
-                    try:
-                        date_part = picking.certified_picking_datacarga
-                        time_part_str = picking.certified_picking_horacarga or target_dt.strftime("%H:%M:%S")
-                        time_parts = [int(p) for p in time_part_str.split(':')[:3]]
-                        while len(time_parts) < 3:
-                            time_parts.append(0)
-
-                        user_dt = datetime(date_part.year, date_part.month, date_part.day, time_parts[0], time_parts[1], time_parts[2])
-                        if user_dt > now_datetime:
-                            target_dt = user_dt
-                    except Exception:
-                        pass
-
-                today_str = str(fields.Date.today())
-                now_str = now_datetime.strftime("%Y-%m-%d %H:%M:%S")
-
-                datacarga_str = target_dt.strftime("%Y-%m-%d")
-                horacarga_str = target_dt.strftime("%H:%M:%S")
-
-                picking.write({
-                    'certified_picking_datacarga': target_dt.date(),
-                    'certified_picking_horacarga': horacarga_str,
-                })
-
-                gt_payload = {
-                    'transportdocument': {
-                        'loja': store_id,
-                        'doc': 'GT',
-                        'serie': serie_str,
-                        'numero': gt_numero,
-                        'anulado': 0,
-                        'sync': 1,
-                        'cliente': zs_client_code,
-                        'fornecedor': 0,
-                        'emp': 0,
-                        'contribuinte': vat_clean,
-                        'nome': partner.name or 'CONSUMIDOR FINAL',
-                        'morada': f"{partner.street or ''} {partner.zip or ''} {partner.city or ''}".strip() or "------",
                         'data': today_str,
                         'datahora': now_str,
-                        'datacarga': datacarga_str,
-                        'horacarga': horacarga_str,
-                        'datadescarga': datacarga_str,
-                        'horadescarga': horacarga_str,
-                        'carga': f"{company.street or ''}".strip() or "Morada Origem",
-                        'carga_localidade': company.city or "Localidade",
-                        'carga_codigo_postal': company.zip or "0000-000",
-                        'descarga': f"{partner.street or ''}".strip() or "Morada Destino",
-                        'descarga_localidade': partner.city or "Localidade",
-                        'descarga_codigo_postal': partner.zip or "0000-000",
-                        'docforn': picking.name,
-                        'docext': 0,
-                        'ivaincluido': 1,
-                        'pagamento': 1,
-                        'vendas': vendas
-                    }
-                }
+                        'empid': 0,
+                        'posto': 1,
+                    })
+
+                # Construct transportdocument from full template
+                gt_doc = picking._get_zonesoft_gt_template(store_id)
+                gt_doc.update({
+                    'loja': store_id,
+                    'doc': 'GT',
+                    'serie': serie_str,
+                    'numero': gt_numero,
+                    'cliente': zs_client_code,
+                    'contribuinte': vat_clean,
+                    'nome': partner.name or 'CONSUMIDOR FINAL',
+                    'morada': f"{partner.street or ''} {partner.zip or ''} {partner.city or ''}".strip() or "------",
+                    'data': today_str,
+                    'datahora': now_str,
+                    'datacarga': datacarga_str,
+                    'horacarga': horacarga_str,
+                    'datadescarga': datadescarga_str,
+                    'horadescarga': horadescarga_str,
+                    'levantamento': f"{datacarga_str} 00:00:00",
+                    'dataentrega': f"{datadescarga_str} 00:00:00",
+                    'carga': f"{company.street or ''}".strip() or "Morada Origem",
+                    'carga_localidade': company.city or "Localidade",
+                    'carga_codigo_postal': company.zip or "4510-480",
+                    'descarga': f"{partner.street or ''}".strip() or "Morada Destino",
+                    'descarga_localidade': partner.city or "Localidade",
+                    'descarga_codigo_postal': partner.zip or "4000-000",
+                    'docforn': picking.name,
+                    'vendas': vendas
+                })
+
+                gt_payload = {'transportdocument': gt_doc}
 
                 endpoint = f"{base_host}transportdocuments/saveInstance"
 
@@ -535,21 +628,6 @@ class StockPicking(models.Model):
                         picking._handle_certified_picking_error(err_msg, raise_exception)
                         continue
 
-                    # Sync back new sequence number to ZoneSoft numdocseries
-                    if doc_number_found and gt_numero:
-                        try:
-                            AccountMove._send_zonesoft_request(f"{base_host}numdocseries/saveInstances", {
-                                "numdocserie": [{
-                                    "doc": "GT",
-                                    "serie": serie_str,
-                                    "numero": gt_numero,
-                                    "loja": store_id,
-                                    "sync": 0
-                                }]
-                            }, app_key, app_secret, client_id, timeout_val)
-                        except Exception:
-                            pass
-
                     certified_number = doc_number_found or f"GT {picking.name}"
                     atcud = atcud_found or (inv_resp.get('atcud') if isinstance(inv_resp, dict) else False) or (inv_resp.get('hash') if isinstance(inv_resp, dict) else False) or 'N/A'
                     qr_code = (inv_resp.get('qr_code') if isinstance(inv_resp, dict) else False) or (inv_resp.get('pdf') if isinstance(inv_resp, dict) else False) or ''
@@ -560,6 +638,10 @@ class StockPicking(models.Model):
                         pdf_resp = requests.get(pdf_url, timeout=timeout_val)
                         if pdf_resp.status_code == 200:
                             pdf_b64 = base64.b64encode(pdf_resp.content).decode('utf-8')
+
+                    # If ZoneSoft API returned 200/201 OK but no PDF URL, generate local ReportLab PDF with official AT details
+                    if not pdf_b64 and doc_number_found:
+                        pdf_b64 = picking._generate_certified_picking_pdf(certified_number, atcud, qr_code)
 
                     if not pdf_b64:
                         err_msg = _("A Zonesoft não retornou nenhum documento!")
