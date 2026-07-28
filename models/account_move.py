@@ -186,21 +186,19 @@ class AccountMove(models.Model):
             if not line.product_id:
                 raise UserError(_("A linha com a descrição '%s' não tem nenhum artigo/produto selecionado. Todas as linhas da fatura devem ter um artigo atribuído antes de emitir na API certificada.") % (line.name or 'Sem descrição'))
 
-            code_raw = line.product_id.default_code
-            if code_raw and code_raw.isdigit():
+            product = line.product_id
+            code_raw = product.default_code
+            if code_raw and code_raw.isdigit() and int(code_raw) > 0:
                 prod_code = int(code_raw)
             else:
+                prod_code = 1000000 + product.id
                 try:
-                    res_next = self._send_zonesoft_request(f"{base_host}products/getNextCodigo", {"product": {}}, app_key, app_secret, client_id, timeout_val)
-                    if res_next.status_code == 200:
-                        prod_code = res_next.json().get('Response', {}).get('Content', {}).get('product', {}).get('codigo')
-                    else:
-                        prod_code = 1100000 + line.product_id.id
+                    product.sudo().write({'default_code': str(prod_code)})
                 except Exception:
-                    prod_code = 1100000 + line.product_id.id
+                    pass
 
             tax_rate = sum(line.tax_ids.mapped('amount'))
-            prod_name = (line.product_id.name or line.name or 'Artigo')[:50]
+            prod_name = (product.name or line.name or 'Artigo')[:50]
 
             prod_dict = {
                 "armazem": 0,
@@ -256,8 +254,8 @@ class AccountMove(models.Model):
                 "precocompra": 0,
                 "precomeia": 0,
                 "precominimo": 0,
-                "precorevenda": float(line.price_unit),
-                "precovenda": float(line.price_unit),
+                "precorevenda": float(line.price_unit or product.lst_price or 1.0),
+                "precovenda": float(line.price_unit or product.lst_price or 1.0),
                 "prepagamento": 0,
                 "prodstock": prod_code,
                 "produto_opcoes": None,
@@ -302,8 +300,13 @@ class AccountMove(models.Model):
                 _logger.info("A pré-sincronizar produto %s (código %s) para ZoneSoft...", prod_name, prod_code)
                 res = self._send_zonesoft_request(endpoint, prod_payload, app_key, app_secret, client_id, timeout_val)
                 _logger.info("Resposta sync produto ZoneSoft: Status %s - %s", res.status_code, res.text[:200])
+                if res.status_code not in (200, 201):
+                    raise UserError(_("Não foi possível registar o artigo '%s' (código %s) na ZoneSoft (Status %s): %s") % (prod_name, prod_code, res.status_code, res.text))
+            except UserError:
+                raise
             except Exception as e:
                 _logger.warning("Falha ao pré-sincronizar produto ZoneSoft: %s", str(e))
+                raise UserError(_("Falha de ligação ao pré-sincronizar artigo '%s' para a ZoneSoft: %s") % (prod_name, str(e)))
 
             prod_map[line.id] = prod_code
 

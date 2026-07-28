@@ -302,30 +302,28 @@ class StockPicking(models.Model):
             if not move.product_id:
                 raise UserError(_("A linha com o artigo '%s' não tem produto válido.") % (move.name or 'Sem descrição'))
 
-            code_raw = move.product_id.default_code
-            if code_raw and code_raw.isdigit():
+            product = move.product_id
+            code_raw = product.default_code
+
+            if code_raw and code_raw.isdigit() and int(code_raw) > 0:
                 prod_code = int(code_raw)
             else:
+                # Assign deterministic positive integer code for ZoneSoft product catalog
+                prod_code = 1000000 + product.id
                 try:
-                    res_next = AccountMove._send_zonesoft_request(
-                        f"{base_host}products/getNextCodigo", {"product": {}}, app_key, app_secret, client_id, timeout_val
-                    )
-                    if res_next.status_code == 200:
-                        prod_code = res_next.json().get('Response', {}).get('Content', {}).get('product', {}).get('codigo')
-                    else:
-                        prod_code = 1100000 + move.product_id.id
+                    product.sudo().write({'default_code': str(prod_code)})
                 except Exception:
-                    prod_code = 1100000 + move.product_id.id
+                    pass
 
             sale_line = getattr(move, 'sale_line_id', False)
             if sale_line:
                 tax_rate = sum(sale_line.tax_id.mapped('amount'))
                 price_unit = sale_line.price_unit
             else:
-                tax_rate = sum(move.product_id.taxes_id.mapped('amount')) or 23.0
-                price_unit = move.product_id.lst_price or 1.0
+                tax_rate = sum(product.taxes_id.mapped('amount')) or 23.0
+                price_unit = product.lst_price or 1.0
 
-            prod_name = (move.product_id.name or move.name or 'Artigo')[:50]
+            prod_name = (product.name or move.name or 'Artigo')[:50]
 
             prod_dict = {
                 "armazem": 0,
@@ -427,8 +425,13 @@ class StockPicking(models.Model):
                 _logger.info("A pré-sincronizar produto %s (código %s) para ZoneSoft...", prod_name, prod_code)
                 res = AccountMove._send_zonesoft_request(endpoint, prod_payload, app_key, app_secret, client_id, timeout_val)
                 _logger.info("Resposta sync produto ZoneSoft: Status %s - %s", res.status_code, res.text[:200])
+                if res.status_code not in (200, 201):
+                    raise UserError(_("Não foi possível registar o artigo '%s' (código %s) na ZoneSoft (Status %s): %s") % (prod_name, prod_code, res.status_code, res.text))
+            except UserError:
+                raise
             except Exception as e:
                 _logger.warning("Falha ao pré-sincronizar produto ZoneSoft: %s", str(e))
+                raise UserError(_("Falha de ligação ao pré-sincronizar artigo '%s' para a ZoneSoft: %s") % (prod_name, str(e)))
 
             prod_map[move.id] = prod_code
 
@@ -474,7 +477,11 @@ class StockPicking(models.Model):
                 vat_clean = AccountMove._clean_vat(partner.vat, partner.name)
                 zs_client_code = partner.id if (partner.name and partner.name.upper() != 'CONSUMIDOR FINAL' and vat_clean != '999999990') else 0
 
-                prod_map = picking._sync_zonesoft_products_for_picking(base_host, app_key, app_secret, client_id, timeout_val, store_id)
+                try:
+                    prod_map = picking._sync_zonesoft_products_for_picking(base_host, app_key, app_secret, client_id, timeout_val, store_id)
+                except Exception as e:
+                    picking._handle_certified_picking_error(str(e), raise_exception)
+                    continue
 
                 now_utc = datetime.utcnow()
                 # Portugal local time is UTC+1 (WEST in summer)
@@ -522,7 +529,7 @@ class StockPicking(models.Model):
                     prod_code = prod_map.get(move.id)
                     if not prod_code:
                         code_raw = move.product_id.default_code
-                        prod_code = int(code_raw) if (code_raw and code_raw.isdigit()) else (1100000 + move.product_id.id)
+                        prod_code = int(code_raw) if (code_raw and code_raw.isdigit()) else (1000000 + move.product_id.id)
 
                     qty = float(getattr(move, 'quantity', getattr(move, 'product_uom_qty', 1.0)))
                     sale_line = getattr(move, 'sale_line_id', False)
