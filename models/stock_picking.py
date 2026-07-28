@@ -524,9 +524,10 @@ class StockPicking(models.Model):
                         if pdf_resp.status_code == 200:
                             pdf_b64 = base64.b64encode(pdf_resp.content).decode('utf-8')
 
-                    # Generate valid ReportLab PDF if no valid downloadable PDF URL was returned by API
                     if not pdf_b64:
-                        pdf_b64 = picking._generate_certified_picking_pdf(certified_number, atcud, qr_code)
+                        err_msg = _("A Zonesoft não retornou nenhum documento!")
+                        picking._handle_certified_picking_error(err_msg, raise_exception)
+                        continue
 
                     picking._process_certified_picking_success(certified_number, atcud, qr_code, pdf_b64)
 
@@ -616,7 +617,9 @@ class StockPicking(models.Model):
                     pdf_b64 = res_json.get('pdf_b64')
 
                     if not pdf_b64:
-                        pdf_b64 = picking._generate_certified_picking_pdf(certified_number, atcud, qr_code)
+                        err_msg = _("A Zonesoft não retornou nenhum documento!")
+                        picking._handle_certified_picking_error(err_msg, raise_exception)
+                        continue
 
                     picking._process_certified_picking_success(certified_number, atcud, qr_code, pdf_b64)
 

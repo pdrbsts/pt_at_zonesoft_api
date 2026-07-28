@@ -460,7 +460,9 @@ class AccountMove(models.Model):
                             pdf_b64 = base64.b64encode(pdf_resp.content).decode('utf-8')
 
                     if not pdf_b64:
-                        pdf_b64 = move._generate_certified_invoice_pdf(certified_number, atcud, qr_code)
+                        err_msg = _("A Zonesoft não retornou nenhum documento!")
+                        move._handle_certified_api_error(err_msg, raise_exception)
+                        continue
 
                     move._process_certified_success(certified_number, atcud, qr_code, pdf_b64)
 
@@ -511,7 +513,7 @@ class AccountMove(models.Model):
                             pdf_b64 = base64.b64encode(pdf_resp.content).decode('utf-8')
 
                     if not pdf_b64:
-                        err_msg = "A API não retornou o PDF certificado da fatura."
+                        err_msg = _("A Zonesoft não retornou nenhum documento!")
                         move._handle_certified_api_error(err_msg, raise_exception)
                         continue
 
