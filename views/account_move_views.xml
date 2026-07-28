@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_move_form_inherit_pt_at" model="ir.ui.view">
+        <field name="name">account.move.form.inherit.pt.at</field>
+        <field name="model">account.move</field>
+        <field name="inherit_id" ref="account.view_move_form"/>
+        <field name="arch" type="xml">
+            <!-- Header button for manual API emission -->
+            <xpath expr="//header" position="inside">
+                <button name="action_send_certified_invoice" 
+                        type="object" 
+                        string="Emitir Fatura Certificada (API)" 
+                        class="oe_highlight"
+                        invisible="state != 'posted' or move_type not in ('out_invoice', 'out_refund') or certified_invoice_status == 'sent'"/>
+            </xpath>
+
+            <!-- Status widget near the document header status bar -->
+            <xpath expr="//header" position="after">
+                <div class="alert alert-danger mb-0" role="alert" invisible="certified_invoice_status != 'error'">
+                    <strong>Erro na Emissão Certificada AT:</strong> 
+                    <field name="certified_invoice_error_log" readonly="1"/>
+                </div>
+            </xpath>
+
+            <!-- Notebook Tab for Certified Invoice details -->
+            <xpath expr="//notebook" position="inside">
+                <page string="Fatura Certificada AT" invisible="move_type not in ('out_invoice', 'out_refund')">
+                    <group>
+                        <group string="Estado &amp; Certificação">
+                            <field name="certified_invoice_status" widget="badge" 
+                                   decoration-success="certified_invoice_status == 'sent'" 
+                                   decoration-danger="certified_invoice_status == 'error'" 
+                                   decoration-muted="certified_invoice_status == 'not_sent'"/>
+                            <field name="certified_invoice_number"/>
+                            <field name="certified_invoice_atcud"/>
+                            <field name="certified_invoice_sent_date"/>
+                        </group>
+                        <group string="Dados de Validação AT">
+                            <field name="certified_invoice_qr_code"/>
+                        </group>
+                    </group>
+                </page>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Tree view extension to show certification status badge -->
+    <record id="view_invoice_tree_inherit_pt_at" model="ir.ui.view">
+        <field name="name">account.invoice.tree.inherit.pt.at</field>
+        <field name="model">account.move</field>
+        <field name="inherit_id" ref="account.view_invoice_tree"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='name']" position="after">
+                <field name="certified_invoice_status" widget="badge" string="Estado AT"
+                       decoration-success="certified_invoice_status == 'sent'" 
+                       decoration-danger="certified_invoice_status == 'error'" 
+                       decoration-muted="certified_invoice_status == 'not_sent'"
+                       optional="show"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>
