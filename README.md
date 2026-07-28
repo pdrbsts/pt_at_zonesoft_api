@@ -32,7 +32,7 @@ Módulo de integração para Odoo 18 Community Edition para emissão de faturas 
 - **Odoo**: 18.0 Community ou Enterprise Edition.
 - **Python Dependencies**: `requests` (incluído no ambiente padrão do Odoo).
 - **Conta ZoneSoft API v3**:
-  - `APP-KEY`, `APP-SECRET` e `CLIENT-ID` (obtidos no portal [developer.zonesoft.org](https://developer.zonesoft.org)).
+  - `APP-KEY`, `APP-SECRET`, `CLIENT-ID` e `STORE-ID` (obtidos no portal [developer.zonesoft.org](https://developer.zonesoft.org)).
   - Sub-utilizador do Portal das Finanças / AT (Webservices) ativo e configurado na Loja no Portal ZoneSoft.
 
 ---
